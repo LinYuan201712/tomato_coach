@@ -1,0 +1,89 @@
+# Tomato Study Room - 开发环境配置（示例）
+#
+# 注意：此示例文件用于版本控制。不要在仓库中提交包含真实密钥的 `config.yaml`。
+# 将本文件复制为 `config.yaml` 并在本地或 CI 中填充真实值，或使用环境变量替代敏感字段。
+
+server:
+  port: 8091
+  context_path: /api
+  environment: dev
+
+database:
+  host: localhost
+  port: 3306
+  user: root
+  password: "<YOUR_DB_PASSWORD>"    # 替换为真实密码或使用环境变量
+  database: tomato_study_room
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300
+  log_level: silent
+
+jwt:
+  secret: "<YOUR_JWT_SECRET>"
+  expiration: 3600
+
+log:
+  level: debug
+  format: json
+  output_path: stdout
+  max_size: 100
+  max_backups: 3
+  max_age: 7
+
+upload:
+  base_path: ./uploads
+  max_size: 10485760
+
+ark:
+  api_key: "<ARK_API_KEY>"
+  chat_model: "ep-20260504215517-z986n"
+  embedding_model: ""
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+
+aliyun:
+  api_key: "<ALIYUN_API_KEY>"
+  chat_model: "qwen-plus"
+  cheap_model: "qwen-turbo"
+  embedding_model: "text-embedding-v3"
+
+rag:
+  top_k: 5
+  score_threshold: 0.3
+  hybrid_weight: 0.7
+
+elasticsearch:
+  addresses:
+    - http://localhost:9200
+  username: ""
+  password: ""
+  index: tomato_knowledge
+
+channels:
+  feishu:
+    enabled: false
+    app_id: "<FEISHU_APP_ID>"
+    app_secret: "<FEISHU_APP_SECRET>"
+    verification_token: "<FEISHU_VERIFICATION_TOKEN>"
+    encrypt_key: "<FEISHU_ENCRYPT_KEY>"
+    domain: "feishu"
+
+langfuse:
+  enabled: false
+  public_key: "<LANGFUSE_PUBLIC_KEY>"
+  secret_key: "<LANGFUSE_SECRET_KEY>"
+  base_url: "http://localhost:3000"
+
+mineru:
+  enabled: false
+  token: "<MINERU_TOKEN>"
+  poll_timeout: "15m"
+
+# 其它可追加的生产级配置：
+# - 把敏感值从文件中移到环境变量，并在应用启动时读取（优先推荐）
+# - 在 CI/CD 中使用 secret 管理器注入运行时配置
+
+# 使用示例：
+# 复制示例为真实配置（仅在本地或受控环境）
+# cp config.yaml.example config.yaml
+# 编辑 config.yaml 填入真实值或设置相应环境变量

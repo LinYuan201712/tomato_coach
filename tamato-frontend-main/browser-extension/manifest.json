@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Tomato 专注助手",
+  "version": "1.0.0",
+  "description": "帮助您在专注学习时检测并提醒关闭分心网站",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*",
+    "http://localhost:8090/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:8080/*", "http://localhost:8090/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+

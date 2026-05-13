@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>后端连接测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>后端连接测试工具</h1>
+    <p>这个工具可以帮助你检查后端服务是否正常运行。</p>
+    
+    <button onclick="testConnection()">测试后端连接</button>
+    
+    <div id="results"></div>
+
+    <script>
+        async function testConnection() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="test-result info">正在测试连接...</div>';
+            
+            const tests = [
+                {
+                    name: '测试后端服务 (http://localhost:8090/api)',
+                    url: 'http://localhost:8090/api/auth/login',
+                    method: 'POST',
+                    body: JSON.stringify({ username: 'test', password: 'test' })
+                }
+            ];
+            
+            let html = '';
+            
+            for (const test of tests) {
+                try {
+                    const response = await fetch(test.url, {
+                        method: test.method,
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: test.body
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok || response.status === 401 || response.status === 400) {
+                        // 401或400表示服务器响应了，只是认证失败
+                        html += `<div class="test-result success">
+                            ✅ ${test.name}<br>
+                            状态码: ${response.status}<br>
+                            服务器响应正常！
+                        </div>`;
+                    } else {
+                        html += `<div class="test-result error">
+                            ❌ ${test.name}<br>
+                            状态码: ${response.status}<br>
+                            响应: ${JSON.stringify(result)}
+                        </div>`;
+                    }
+                } catch (error) {
+                    html += `<div class="test-result error">
+                        ❌ ${test.name}<br>
+                        错误: ${error.message}<br>
+                        <strong>可能的原因：</strong><br>
+                        1. 后端服务未启动<br>
+                        2. 后端运行在不同的端口<br>
+                        3. 防火墙阻止了连接<br>
+                        4. 网络配置问题
+                    </div>`;
+                }
+            }
+            
+            // 测试CORS
+            try {
+                const corsTest = await fetch('http://localhost:8090/api/rooms', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                html += `<div class="test-result success">
+                    ✅ CORS配置正常<br>
+                    可以从前端访问后端API
+                </div>`;
+            } catch (error) {
+                html += `<div class="test-result error">
+                    ❌ CORS测试失败<br>
+                    错误: ${error.message}<br>
+                    <strong>建议：</strong>使用Vue代理配置（已在vue.config.js中配置）
+                </div>`;
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
+

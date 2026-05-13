@@ -1,0 +1,35 @@
+	// 设置连接池
+	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(0) // 禁用过期检查
+
+	// 自动迁移Entity
+	if err := autoMigrate(db); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// autoMigrate 自动迁移数据库表
+func autoMigrate(db *gorm.DB) error {
+	// 暂时禁用外键约束进行迁移，避免循环依赖导致创建失败
+	db.Exec("SET FOREIGN_KEY_CHECKS = 0;")
+	defer db.Exec("SET FOREIGN_KEY_CHECKS = 1;")
+
+	return db.AutoMigrate(
+		&entity.User{},
+		&entity.Task{},
+		&entity.Room{},
+		&entity.RoomMember{},
+		&entity.Friend{},
+		&entity.FriendRequest{},
+		&entity.FocusSession{},
+		&entity.BackgroundMusic{},
+		&entity.SystemConfig{},
+		&entity.StudyReport{},
+		&entity.UserPrivacy{},
+		&entity.UserCurrency{},
+		&entity.CheckinRecord{},
+	)
+}

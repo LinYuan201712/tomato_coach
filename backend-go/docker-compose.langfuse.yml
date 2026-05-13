@@ -1,0 +1,42 @@
+services:
+  langfuse-db:
+    image: postgres:16
+    container_name: langfuse-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=langfuse
+    ports:
+      - "5432:5432"
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+    networks:
+      - langfuse-network
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - langfuse-db
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
+      - NEXTAUTH_URL=http://localhost:3000
+      - TELEMETRY_ENABLED=false
+    networks:
+      - langfuse-network
+
+networks:
+  langfuse-network:
+    driver: bridge
+
+volumes:
+  langfuse_db_data:

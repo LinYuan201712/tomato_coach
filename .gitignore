@@ -1,0 +1,31 @@
+# IDEs
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Backend (Go)
+backend-go/.env
+backend-go/logs/
+backend-go/uploads/
+backend-go/data/
+backend-go/*.exe
+backend-go/*.exe~
+backend-go/bin/
+backend-go/tmp/
+
+# Frontend (Node/Vue)
+tamato-frontend-main/node_modules/
+tamato-frontend-main/dist/
+tamato-frontend-main/.env.local
+tamato-frontend-main/.env.*.local
+tamato-frontend-main/npm-debug.log*
+tamato-frontend-main/yarn-debug.log*
+tamato-frontend-main/yarn-error.log*
+tamato-frontend-main/pnpm-debug.log*
+
+# Other
+*.log

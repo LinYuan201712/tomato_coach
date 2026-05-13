@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # MySQL数据库
+  mysql:
+    image: mysql:8.0
+    container_name: tomato-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - tomato-network
+
+  # Go后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tomato-backend
+    env_file:
+      - .env
+    environment:
+      TOMATO_DB_HOST: mysql
+      TOMATO_DB_PORT: 3306
+      TOMATO_DB_USER: root
+      TOMATO_DB_NAME: ${MYSQL_DATABASE}
+      TOMATO_ENVIRONMENT: prod
+    ports:
+      - "8090:8090"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - tomato-network
+    restart: unless-stopped
+
+  # Redis缓存（可选，用于会话存储）
+  redis:
+    image: redis:7-alpine
+    container_name: tomato-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - tomato-network
+    restart: unless-stopped
+
+  # Elasticsearch 向量库
+  elasticsearch:
+    image: elasticsearch:7.17.10
+    container_name: tomato-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - tomato-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  es_data:
+
+networks:
+  tomato-network:
+    driver: bridge
