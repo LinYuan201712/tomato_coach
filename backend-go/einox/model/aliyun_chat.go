@@ -28,8 +28,7 @@ type AliyunChatModel struct {
 func NewAliyunChatModel(ctx context.Context, cfg *config.AliyunConfig) (*AliyunChatModel, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
-		// 使用用户提供的 fallback key
-		apiKey = "sk-f0704e33c7e74a9b8c7661e7ab1370db"
+		return nil, fmt.Errorf("aliyun api key is required")
 	}
 
 	modelName := cfg.ChatModel
