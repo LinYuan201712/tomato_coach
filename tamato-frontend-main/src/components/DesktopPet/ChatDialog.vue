@@ -104,7 +104,13 @@
                 <div class="reasoning-title">🔍 思考与检索中...</div>
                 <div class="reasoning-text">{{ message.reasoning }}</div>
               </div>
+              <div v-if="isPendingAssistantMessage(message, index)" class="message-text typing">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
               <div 
+                v-else
                 class="message-text" 
                 v-html="renderMarkdown(message.content)"
                 @click="handleMessageClick"
@@ -117,18 +123,6 @@
               </div>
             </div>
             <div class="message-avatar" v-if="message.role === 'user'">👤</div>
-          </div>
-          
-          <!-- 加载中提示 -->
-          <div v-if="isLoading" class="message assistant">
-            <div class="message-avatar">🍅</div>
-            <div class="message-content">
-              <div class="message-text typing">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
           </div>
         </div>
         
@@ -518,6 +512,7 @@ export default {
         usage: null
       }
       this.messages.push(assistantMsg)
+      const streamMessage = this.messages[this.messages.length - 1]
 
       try {
         await chatStreamWithAI(
@@ -530,20 +525,20 @@ export default {
           (data) => {
             // 处理实时消息
             if (data.type === 'content' && data.content) {
-              assistantMsg.content += data.content
+              streamMessage.content += data.content
             } else if (data.type === 'reasoning' && data.reasoning) {
-              assistantMsg.reasoning += data.reasoning
+              streamMessage.reasoning += data.reasoning
             }
             if (data.usage) {
-              assistantMsg.usage = { ...data.usage }
+              streamMessage.usage = { ...data.usage }
             }
-            this.scrollToBottom()
+            this.$nextTick(this.scrollToBottom)
         },
         (data) => {
           // 完成
           this.isLoading = false
           if (data && data.usage) {
-            assistantMsg.usage = { ...data.usage }
+            streamMessage.usage = { ...data.usage }
           }
           if (isFirst) {
             setTimeout(() => this.loadSessions(), 3000)
@@ -551,7 +546,7 @@ export default {
         },
           () => {
             this.isLoading = false
-            assistantMsg.content += '\n\n[出错了: 连接中断]'
+            streamMessage.content += '\n\n[出错了: 连接中断]'
           }
         )
       } catch (error) {
@@ -603,6 +598,14 @@ export default {
       })
       
       return md.render(processedText)
+    },
+
+    isPendingAssistantMessage(message, index) {
+      return this.isLoading &&
+        index === this.messages.length - 1 &&
+        message.role === 'assistant' &&
+        !message.content &&
+        !message.reasoning
     },
 
     async handleMessageClick(event) {
