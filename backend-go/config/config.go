@@ -187,8 +187,10 @@ func bindEnvVars(v *viper.Viper) {
 	_ = v.BindEnv("server.environment", "TOMATO_ENVIRONMENT")
 
 	_ = v.BindEnv("ark.embedding_model", "ARK_EMBEDDING_MODEL")
+	_ = v.BindEnv("ark.api_key", "ARK_API_KEY")
 
 	_ = v.BindEnv("aliyun.embedding_model", "ALIYUN_EMBEDDING_MODEL")
+	_ = v.BindEnv("aliyun.api_key", "ALIYUN_API_KEY")
 
 	// 渠道配置
 	_ = v.BindEnv("channels.feishu.app_id", "FEISHU_APP_ID")

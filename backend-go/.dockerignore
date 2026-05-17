@@ -1,0 +1,27 @@
+# Git and IDE files
+.git
+.gitignore
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local Go build artifacts
+*.exe
+main.exe
+main
+tomato-backend
+
+# Temporary directories and local storage
+data/
+logs/
+uploads/
+tmp/
+.gocache/
+
+# Configuration and secrets (sensitive values injected via env_file at runtime)
+.env
+.env.example
