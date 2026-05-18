@@ -134,15 +134,18 @@ func (a *StudyAgent) StreamGenerateWithState(ctx context.Context, state *AgentSt
 	}
 
 	var knowledge string
+	knowledgeFound := false
 	if state.UseKnowledge {
 		if a.rag != nil {
 			timeNow := time.Now().Format("2006-01-02 15:04:05")
 			contextStr, docs, err := a.rag.ProfessionalQuery(ctx, state.Query, timeNow, "StudyCoach知识库", state.UserID)
 			if err == nil && len(docs) > 0 {
 				knowledge = contextStr
+				knowledgeFound = true
 			}
 		}
 	}
+	systemPrompt = withKnowledgeModeRules(systemPrompt, state.UseKnowledge, knowledgeFound)
 
 	// 模式决策
 	budget := 8000
@@ -155,7 +158,7 @@ func (a *StudyAgent) StreamGenerateWithState(ctx context.Context, state *AgentSt
 		budget = 1500
 		fmt.Printf("[StudyAgent] 快速模式：精简上下文 (Budget: 1500)\n")
 	} else {
-		items = append(items, 
+		items = append(items,
 			prompt.ContextItem{Tag: "task_summary", Content: state.TaskSummary, Priority: prompt.P2},
 			prompt.ContextItem{Tag: "episodic_context", Content: state.EpisodicContext, Priority: prompt.P2},
 		)
@@ -168,4 +171,27 @@ func (a *StudyAgent) StreamGenerateWithState(ctx context.Context, state *AgentSt
 
 	state.History = prompt.AssembleMessages(systemPrompt, state.Query, state.History, items, budget)
 	return RunGraphReAct(ctx, a.chatModel, state, relevantTools)
+}
+
+func withKnowledgeModeRules(systemPrompt string, useKnowledge bool, knowledgeFound bool) string {
+	if !useKnowledge {
+		return systemPrompt
+	}
+	if knowledgeFound {
+		return fmt.Sprintf(`%s
+
+【严格知识库模式】
+用户已开启知识库增强，且本轮已经从用户上传的知识库文件中检索到相关内容。
+1. 必须优先、严格依据 <knowledge_context> 中的资料回答；不要把常识、外部资料或历史对话当作事实来源扩展。
+2. 可以做必要的归纳、解释和组织，但不得新增知识库中没有的来源、文件名、链接、章节或参考资料。
+3. 回答末尾必须列出“参考资料”，且只能使用 <knowledge_context> 中出现的“引用格式”或“来源”文件名，格式为：[n] 来源：[[文件名]]。
+4. 如果知识库资料只能回答一部分，请明确说明“根据已上传资料，只能确认……”，不要补写成资料中没有的结论。`, systemPrompt)
+	}
+	return fmt.Sprintf(`%s
+
+【严格知识库模式】
+用户已开启知识库增强，但本轮没有从用户上传的知识库文件中检索到可用内容。
+1. 回答开头必须明确说明：“我在你的知识库中没有找到与这个问题直接相关的内容。”
+2. 随后可以使用通用知识做补充说明，但必须标明这是“非知识库补充”。
+3. 严禁添加“参考资料”部分，严禁输出任何 [[文件名]]、Markdown 链接或伪造来源。`, systemPrompt)
 }

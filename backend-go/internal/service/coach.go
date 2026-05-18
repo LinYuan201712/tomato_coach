@@ -11,12 +11,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/tomato/backend/config"
 	"github.com/tomato/backend/einox/agent"
+	"github.com/tomato/backend/einox/callback"
 	"github.com/tomato/backend/einox/memory"
 	"github.com/tomato/backend/einox/model"
 	"github.com/tomato/backend/einox/rag"
 	"github.com/tomato/backend/einox/tools"
 	"github.com/tomato/backend/einox/workflow"
-	"github.com/tomato/backend/einox/callback"
 	"github.com/tomato/backend/internal/domain/constants"
 	"github.com/tomato/backend/internal/domain/entity"
 	"github.com/tomato/backend/internal/pkg/logger"
@@ -76,14 +76,19 @@ func NewCoachService(cfg *config.Config, taskSvc TaskService, chatRepo repositor
 
 	// 0. 初始化全局回调处理器 (Langfuse + Logging)
 	var lfCallback *callback.LangfuseCallback
-	if cfg.Langfuse.SecretKey != "" {
+	isValidKey := func(k string) bool {
+		return k != "" && !strings.HasPrefix(k, "$") && !strings.HasPrefix(k, "<")
+	}
+	if cfg.Langfuse.Enabled && isValidKey(cfg.Langfuse.PublicKey) && isValidKey(cfg.Langfuse.SecretKey) {
 		lfCallback = callback.NewLangfuseCallback(cfg.Langfuse.PublicKey, cfg.Langfuse.SecretKey, cfg.Langfuse.BaseURL)
 		logger.Info("Langfuse observability enabled")
+	} else {
+		logger.Info("Langfuse observability disabled")
 	}
 	cbHandler := callback.NewModelCallbackHandler(cfg.Server.Environment == "dev", lfCallback)
 
 	// 初始化聊天模型
-	if cfg.Aliyun.APIKey != "" || cfg.Aliyun.ChatModel != "" {
+	if cfg.Aliyun.APIKey != "" {
 		smartCfg := &config.AliyunConfig{APIKey: cfg.Aliyun.APIKey, ChatModel: cfg.Aliyun.ChatModel}
 		cheapCfg := &config.AliyunConfig{APIKey: cfg.Aliyun.APIKey, ChatModel: cfg.Aliyun.CheapModel}
 
@@ -251,6 +256,17 @@ func (s *coachService) ChatStream(ctx context.Context, userID int64, sessionID s
 	traceID := uuid.New().String()
 	ctx = callback.SetTraceInfo(ctx, traceID, fmt.Sprintf("%d", userID))
 	ctx = context.WithValue(ctx, "user_id", userID) // 关键修复：显式注入 userID 供工具调用
+	if useKnowledge {
+		allowedFiles, err := s.getActiveKnowledgeFileSet(ctx, userID)
+		if err != nil {
+			s.logger.WithError(err).Warn("获取知识库文件清单失败")
+		} else {
+			ctx = context.WithValue(ctx, rag.AllowedKnowledgeFilesContextKey, allowedFiles)
+		}
+		if err := s.cleanupStaleKnowledgeIndex(ctx, userID); err != nil {
+			s.logger.WithError(err).Warn("清理过期知识库索引失败")
+		}
+	}
 
 	history, err := s.memory.GetHistory(ctx, userID, sessionID)
 	if err != nil {
@@ -302,7 +318,7 @@ func (s *coachService) ChatStream(ctx context.Context, userID int64, sessionID s
 				}
 				break
 			}
-			
+
 			if msg != nil && msg.Content != "" {
 				fmt.Printf(">>> CoachService: Forwarding to pipe: [%s]\n", msg.Content)
 			}
@@ -479,11 +495,57 @@ func (s *coachService) DeleteKnowledge(ctx context.Context, userID int64, docID 
 	// 这里暂时用文件名作为 docID 兼容之前的逻辑，或者查找记录
 	var file entity.KnowledgeFile
 	if err := s.db.WithContext(ctx).Where("user_id = ? AND (id = ? OR file_name = ?)", userID, docID, docID).First(&file).Error; err == nil {
-		s.db.WithContext(ctx).Delete(&file)
+		if err := s.db.WithContext(ctx).Delete(&file).Error; err != nil {
+			return err
+		}
+		if err := s.rag.DeleteFile(ctx, file.FileName, userID); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	// 2. 删除 RAG 索引
 	return s.rag.DeleteDocument(ctx, docID)
+}
+
+func (s *coachService) cleanupStaleKnowledgeIndex(ctx context.Context, userID int64) error {
+	activeFiles, err := s.getActiveKnowledgeFileSet(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	docs, err := s.rag.ListDocuments(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	for _, doc := range docs {
+		fileName, _ := doc.MetaData[rag.MetaFileName].(string)
+		fileName = strings.TrimSpace(fileName)
+		if fileName == "" || activeFiles[fileName] {
+			continue
+		}
+		s.logger.Infof("[RAG] 清理数据库中不存在的知识库索引: %s", fileName)
+		if err := s.rag.DeleteFile(ctx, fileName, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *coachService) getActiveKnowledgeFileSet(ctx context.Context, userID int64) (map[string]bool, error) {
+	var files []entity.KnowledgeFile
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Find(&files).Error; err != nil {
+		return nil, err
+	}
+
+	activeFiles := make(map[string]bool, len(files))
+	for _, file := range files {
+		fileName := strings.TrimSpace(file.FileName)
+		if fileName != "" {
+			activeFiles[fileName] = true
+		}
+	}
+	return activeFiles, nil
 }
 
 func (s *coachService) RenameKnowledge(ctx context.Context, userID int64, fileID int64, newName string) error {
@@ -540,7 +602,21 @@ func (s *coachService) GetHistory(ctx context.Context, userID int64, sessionID s
 }
 
 func (s *coachService) GetKnowledgePreview(ctx context.Context, userID int64, fileName string) (string, error) {
-	return s.rag.GetFullDocument(ctx, fileName, userID)
+	fileName = strings.TrimSpace(fileName)
+	content, err := s.rag.GetFullDocument(ctx, fileName, userID)
+	if err != nil || strings.TrimSpace(content) != "" {
+		return content, err
+	}
+
+	var file entity.KnowledgeFile
+	dbErr := s.db.WithContext(ctx).
+		Where("user_id = ? AND (file_name = ? OR display_name = ?)", userID, fileName, fileName).
+		First(&file).Error
+	if dbErr != nil || strings.TrimSpace(file.FileName) == "" || file.FileName == fileName {
+		return content, err
+	}
+
+	return s.rag.GetFullDocument(ctx, file.FileName, userID)
 }
 
 func (s *coachService) GetUserProfile(ctx context.Context, userID int64) (*entity.User, error) {

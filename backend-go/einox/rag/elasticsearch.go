@@ -118,7 +118,23 @@ func (s *ElasticsearchStore) HybridSearch(ctx context.Context, queryStr string, 
 		},
 	}
 
-	return s.doSearch(ctx, body, topK)
+	docs, err := s.doSearch(ctx, body, topK)
+	if err == nil {
+		return docs, nil
+	}
+
+	// Some local Elasticsearch builds do not support the top-level knn object in
+	// _search. Keep knowledge retrieval usable by falling back to BM25.
+	fmt.Printf("[RAG] HybridSearch failed, fallback to BM25: %v\n", err)
+	fallback := map[string]any{
+		"size": topK,
+		"query": map[string]any{
+			"match": map[string]any{
+				"content": queryStr,
+			},
+		},
+	}
+	return s.doSearch(ctx, fallback, topK)
 }
 
 func (s *ElasticsearchStore) GetFullDocument(ctx context.Context, fileName string, userID int64) (string, error) {

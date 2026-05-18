@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -128,7 +129,7 @@ func BuildContext(docs []*Document) string {
 	}
 
 	var builder strings.Builder
-	builder.WriteString("以下是检索到的参考资料。请在回答时引用它们，并在文末列出参考资料清单，格式为 [n] 来源：[[文件名]]。如果你没有使用这些资料，请不要胡编乱造来源。\n\n")
+	builder.WriteString("以下是检索到的用户上传资料。回答末尾的“参考资料”只能引用下面出现的“来源”文件名，格式必须是 [n] 来源：[[文件名]]。禁止生成 Markdown 链接、网页 URL、下载地址或没有出现在来源清单中的标题。\n\n")
 	totalChars := 0
 	const maxContextChars = 6000 // 调高单次知识库字符上限
 
@@ -149,16 +150,18 @@ func BuildContext(docs []*Document) string {
 		mergedChunks := make([]string, 0)
 		if len(fileDocs) > 0 {
 			currentContent := fileDocs[0].Content
-			_, _ = fileDocs[0].MetaData[MetaStartIndex].(int)
-			currentEnd, _ := fileDocs[0].MetaData[MetaEndIndex].(int)
+			_, currentHasStart := fileDocs[0].MetaData[MetaStartIndex].(int)
+			currentEnd, currentHasEnd := fileDocs[0].MetaData[MetaEndIndex].(int)
+			currentHasPosition := currentHasStart && currentHasEnd
 
 			for j := 1; j < len(fileDocs); j++ {
-				nextStart, _ := fileDocs[j].MetaData[MetaStartIndex].(int)
-				nextEnd, _ := fileDocs[j].MetaData[MetaEndIndex].(int)
+				nextStart, nextHasStart := fileDocs[j].MetaData[MetaStartIndex].(int)
+				nextEnd, nextHasEnd := fileDocs[j].MetaData[MetaEndIndex].(int)
+				nextHasPosition := nextHasStart && nextHasEnd
 				nextContent := fileDocs[j].Content
 
 				// 如果有重叠或相邻 (允许 1 个字符的缝隙作为相邻处理)
-				if nextStart <= currentEnd {
+				if currentHasPosition && nextHasPosition && nextStart <= currentEnd {
 					// 如果 nextEnd 超过 currentEnd，则追加不重叠的部分
 					if nextEnd > currentEnd {
 						overlap := currentEnd - nextStart
@@ -178,13 +181,15 @@ func BuildContext(docs []*Document) string {
 					mergedChunks = append(mergedChunks, currentContent)
 					currentContent = nextContent
 					currentEnd = nextEnd
+					currentHasPosition = nextHasPosition
 				}
 			}
 			mergedChunks = append(mergedChunks, currentContent)
 		}
 
 		// 3. 写入 Builder
-		builder.WriteString(fmt.Sprintf("[Ref %d] (来源: %s)\n", i+1, fileName))
+		builder.WriteString(fmt.Sprintf("[Ref %d] 来源：%s\n", i+1, fileName))
+		builder.WriteString(fmt.Sprintf("引用格式：[%d] 来源：[[%s]]\n", i+1, fileName))
 		for _, content := range mergedChunks {
 			if totalChars+len(content) > maxContextChars {
 				remaining := maxContextChars - totalChars
@@ -327,7 +332,7 @@ func (r *SimpleRAG) ProfessionalQuery(ctx context.Context, query string, timeNow
 	extractResp, err := r.chatModel.Generate(ctx, extractMsgs)
 	coreQuery := query
 	if err == nil {
-		coreQuery = strings.TrimSpace(extractResp.Content)
+		coreQuery = normalizeSearchQuery(query, extractResp.Content)
 	}
 
 	usedKeywords := make([]string, 0)
@@ -343,7 +348,7 @@ func (r *SimpleRAG) ProfessionalQuery(ctx context.Context, query string, timeNow
 			if err == nil {
 				resp, err := r.chatModel.Generate(ctx, rewriteMsgs)
 				if err == nil {
-					currentQuery = strings.TrimSpace(resp.Content)
+					currentQuery = normalizeSearchQuery(query, resp.Content)
 				}
 			}
 		}
@@ -354,12 +359,15 @@ func (r *SimpleRAG) ProfessionalQuery(ctx context.Context, query string, timeNow
 		// 2. 检索
 		_, docs, err := r.Query(ctx, currentQuery)
 		if err == nil {
+			fmt.Printf("[RAG] Round %d retrieved %d docs\n", i+1, len(docs))
 			for _, doc := range docs {
 				if !docMap[doc.ID] {
 					allDocs = append(allDocs, doc)
 					docMap[doc.ID] = true
 				}
 			}
+		} else {
+			fmt.Printf("[RAG] Round %d query failed: %v\n", i+1, err)
 		}
 
 		if len(allDocs) >= r.topK*2 {
@@ -375,9 +383,56 @@ func (r *SimpleRAG) ProfessionalQuery(ctx context.Context, query string, timeNow
 		}
 	}
 
+	beforeFilter := len(allDocs)
+	allDocs = filterAllowedKnowledgeDocs(ctx, allDocs)
+	if beforeFilter != len(allDocs) {
+		fmt.Printf("[RAG] Filtered docs by active knowledge files: %d -> %d\n", beforeFilter, len(allDocs))
+	}
+
 	// 5. 构建上下文（移除激进的全文替换逻辑，改回纯切片模式）
 	finalContext := BuildContext(allDocs)
 	return finalContext, allDocs, nil
+}
+
+func normalizeSearchQuery(original string, candidate string) string {
+	query := strings.TrimSpace(candidate)
+	if query == "" {
+		return strings.TrimSpace(original)
+	}
+
+	runes := []rune(query)
+	looksLikeAnswer := len(runes) > 80 ||
+		strings.Count(query, "\n") > 1 ||
+		strings.Contains(query, "|") ||
+		strings.Contains(query, "###") ||
+		strings.Contains(query, "```") ||
+		strings.Contains(query, "参考资料")
+	if looksLikeAnswer {
+		fallback := strings.TrimSpace(original)
+		fmt.Printf("[RAG] Ignored overlong generated search query, fallback to user query: %s\n", fallback)
+		return fallback
+	}
+
+	return query
+}
+
+func filterAllowedKnowledgeDocs(ctx context.Context, docs []*Document) []*Document {
+	allowed, ok := ctx.Value(AllowedKnowledgeFilesContextKey).(map[string]bool)
+	if !ok || len(allowed) == 0 {
+		return docs
+	}
+
+	filtered := make([]*Document, 0, len(docs))
+	for _, doc := range docs {
+		fileName, _ := doc.MetaData[MetaFileName].(string)
+		fileName = strings.TrimSpace(fileName)
+		if allowed[fileName] {
+			filtered = append(filtered, doc)
+			continue
+		}
+		fmt.Printf("[RAG] Dropped stale or hallucinated source before prompt: %s\n", fileName)
+	}
+	return filtered
 }
 
 func (r *SimpleRAG) prepareRewriteMessages(ctx context.Context, query string, timeNow string, knowledgeBase string, used []string) ([]*schema.Message, error) {
@@ -453,36 +508,97 @@ func (r *SimpleRAG) DeleteDocument(ctx context.Context, docID string) error {
 	return r.store.Delete(ctx, docID)
 }
 
-func (r *SimpleRAG) GetFullDocument(ctx context.Context, fileName string, userID int64) (string, error) {
-	if hs, ok := r.store.(HybridStore); ok {
-		return hs.GetFullDocument(ctx, fileName, userID)
+func (r *SimpleRAG) DeleteFile(ctx context.Context, fileName string, userID int64) error {
+	docs, err := r.store.List(ctx)
+	if err != nil {
+		return err
 	}
 
-	// 如果不是 HybridStore，则通过 List 过滤（虽然效率稍低但能保证兼容性）
+	for _, doc := range docs {
+		metaFile, _ := doc.MetaData[MetaFileName].(string)
+		if strings.TrimSpace(metaFile) != strings.TrimSpace(fileName) {
+			continue
+		}
+		if documentUserID(doc) != userID {
+			continue
+		}
+		if err := r.store.Delete(ctx, doc.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *SimpleRAG) GetFullDocument(ctx context.Context, fileName string, userID int64) (string, error) {
+	if hs, ok := r.store.(HybridStore); ok {
+		content, err := hs.GetFullDocument(ctx, fileName, userID)
+		if err == nil && strings.TrimSpace(content) != "" {
+			return content, nil
+		}
+
+		fallbackContent, fallbackErr := r.getFullDocumentFromList(ctx, fileName, userID)
+		if fallbackErr == nil && strings.TrimSpace(fallbackContent) != "" {
+			return fallbackContent, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		return fallbackContent, fallbackErr
+	}
+
+	return r.getFullDocumentFromList(ctx, fileName, userID)
+}
+
+func (r *SimpleRAG) getFullDocumentFromList(ctx context.Context, fileName string, userID int64) (string, error) {
 	docs, err := r.store.List(ctx)
 	if err != nil {
 		return "", err
 	}
+
+	matchedDocs := make([]*Document, 0)
 	var sb strings.Builder
 	for _, d := range docs {
-		// 鲁棒的文件名匹配
 		metaFile, _ := d.MetaData[MetaFileName].(string)
 		if strings.TrimSpace(metaFile) != strings.TrimSpace(fileName) {
 			continue
 		}
 
-		// 鲁棒的用户 ID 匹配 (处理 float64 和 int64 混合情况)
-		var uid int64
-		if val, ok := d.MetaData["user_id"].(int64); ok {
-			uid = val
-		} else if val, ok := d.MetaData["user_id"].(float64); ok {
-			uid = int64(val)
-		}
-
-		if uid == userID {
-			sb.WriteString(d.Content)
-			sb.WriteString("\n")
+		if documentUserID(d) == userID {
+			matchedDocs = append(matchedDocs, d)
 		}
 	}
+
+	sort.SliceStable(matchedDocs, func(i, j int) bool {
+		left, leftOK := matchedDocs[i].MetaData[MetaStartIndex].(int)
+		right, rightOK := matchedDocs[j].MetaData[MetaStartIndex].(int)
+		if leftOK && rightOK {
+			return left < right
+		}
+		return matchedDocs[i].ID < matchedDocs[j].ID
+	})
+
+	for _, d := range matchedDocs {
+		sb.WriteString(d.Content)
+		sb.WriteString("\n")
+	}
 	return sb.String(), nil
+}
+
+func documentUserID(d *Document) int64 {
+	if d == nil || d.MetaData == nil {
+		return 0
+	}
+	switch val := d.MetaData["user_id"].(type) {
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	case float64:
+		return int64(val)
+	case json.Number:
+		uid, _ := val.Int64()
+		return uid
+	default:
+		return 0
+	}
 }

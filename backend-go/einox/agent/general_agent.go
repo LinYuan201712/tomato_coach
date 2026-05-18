@@ -61,7 +61,7 @@ func (a *GeneralAgent) Generate(ctx context.Context, userID int64, query string,
 		systemPrompt = "你是一个智能助手。请作为一个知识渊博的学习助手，以亲切自然的方式回答用户。"
 	}
 	systemPrompt = strings.ReplaceAll(systemPrompt, "{user_id}", fmt.Sprintf("%d", userID))
-	
+
 	if taskSummary != "" {
 		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, prompt.WrapInTag("task_status", taskSummary))
 	}
@@ -122,6 +122,7 @@ func (a *GeneralAgent) StreamGenerateWithState(ctx context.Context, state *Agent
 		{Tag: "user_profile", Content: state.UserProfile, Priority: prompt.P2},
 	}
 
+	knowledgeFound := false
 	// 注入知识库上下文 (RAG)
 	if state.UseKnowledge && a.rag != nil {
 		// 记录当前时间用于 RAG 里的时间感知查询
@@ -129,14 +130,16 @@ func (a *GeneralAgent) StreamGenerateWithState(ctx context.Context, state *Agent
 		contextStr, docs, _ := a.rag.ProfessionalQuery(ctx, state.Query, timeNow, "通用知识库", state.UserID)
 		if len(docs) > 0 {
 			items = append(items, prompt.ContextItem{Tag: "knowledge_context", Content: contextStr, Priority: prompt.P2})
+			knowledgeFound = true
 		}
 	}
+	systemPrompt = withKnowledgeModeRules(systemPrompt, state.UseKnowledge, knowledgeFound)
 
 	if state.ChatMode == "fast" {
 		budget = 1500
 		fmt.Printf("[GeneralAgent] 快速模式：精简上下文 (Budget: 1500)\n")
 	} else {
-		items = append(items, 
+		items = append(items,
 			prompt.ContextItem{Tag: "task_summary", Content: state.TaskSummary, Priority: prompt.P2},
 			prompt.ContextItem{Tag: "episodic_context", Content: state.EpisodicContext, Priority: prompt.P2},
 		)
