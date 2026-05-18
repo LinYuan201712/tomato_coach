@@ -292,7 +292,7 @@
 </template>
 
 <script>
-import { chatStreamWithAI, getSessions, createSession, getHistory, updateSessionTitle, getKnowledgePreview, getUserProfile, updateUserProfile } from '@/api/ai'
+import { chatStreamWithAI, getSessions, createSession, getHistory, updateSessionTitle, getKnowledgePreview, getUserProfile, updateUserProfile, listKnowledge } from '@/api/ai'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({
@@ -328,6 +328,7 @@ export default {
       previewFileName: '',
       previewContent: '',
       isPreviewLoading: false,
+      knowledgeFiles: [],
       // 布局相关
       sidebarCollapsed: false,
       sidebarWidth: 260,
@@ -350,6 +351,7 @@ export default {
     async visible(newVal) {
       if (newVal) {
         await this.loadSessions()
+        await this.loadKnowledgeFiles()
         this.$nextTick(() => {
           if (this.$refs.inputRef) this.$refs.inputRef.focus()
         })
@@ -413,6 +415,15 @@ export default {
       this.sessions = list
       if (this.sessions.length > 0 && this.currentSessionID === 'default') {
         this.selectSession(this.sessions[0])
+      }
+    },
+
+    async loadKnowledgeFiles() {
+      try {
+        this.knowledgeFiles = await listKnowledge()
+      } catch (error) {
+        console.error('加载知识库文件失败:', error)
+        this.knowledgeFiles = []
       }
     },
 
@@ -584,16 +595,48 @@ export default {
       if (!text) return ''
       
       let processedText = text
+      const resolveKnowledgeFile = (value) => {
+        const normalize = (name) => String(name || '')
+          .trim()
+          .replace(/^📄\s*/, '')
+          .replace(/^["'《]|["'》]$/g, '')
+        const stripExt = (name) => normalize(name).replace(/\.[^.]+$/, '')
+        const target = normalize(value)
+        const targetBase = stripExt(target)
+        const files = this.knowledgeFiles || []
+
+        for (const file of files) {
+          const names = [
+            file.name,
+            file.displayName,
+            stripExt(file.name),
+            stripExt(file.displayName)
+          ].map(normalize).filter(Boolean)
+
+          if (names.includes(target) || names.includes(targetBase)) {
+            return file.name || file.displayName
+          }
+        }
+        return ''
+      }
       
       // 1. 处理双括号格式 [[文件名.md]]
       processedText = processedText.replace(/\[\[(.*?)\]\]/g, (match, fileName) => {
-        return `<a class="file-citation" href="preview:${fileName}" data-preview="${fileName}">📄 ${fileName}</a>`
+        const actualFile = resolveKnowledgeFile(fileName) || fileName.trim()
+        return `<a class="file-citation" href="preview:${actualFile}" data-preview="${actualFile}">📄 ${actualFile}</a>`
       })
       
       // 2. 处理可能被写错的 Markdown 格式 [文件名](preview:文件名) 
       // 这里的正则专门处理文件名中带空格导致渲染器解析失败的情况
       processedText = processedText.replace(/\[(.*?)\]\(preview:(.*?)\)/g, (match, title, fileName) => {
-        const actualFile = fileName.trim()
+        const actualFile = resolveKnowledgeFile(fileName) || resolveKnowledgeFile(title) || fileName.trim()
+        return `<a class="file-citation" href="preview:${actualFile}" data-preview="${actualFile}">📄 ${actualFile}</a>`
+      })
+
+      // 3. 兜底：如果模型误生成了普通 Markdown 链接，但标题匹配用户上传资料，则改成本地资料预览链接。
+      processedText = processedText.replace(/\[([^\]]+)\]\((?!preview:)([^)]+)\)/g, (match, title, href) => {
+        const actualFile = resolveKnowledgeFile(title) || resolveKnowledgeFile(href)
+        if (!actualFile) return match
         return `<a class="file-citation" href="preview:${actualFile}" data-preview="${actualFile}">📄 ${actualFile}</a>`
       })
       

@@ -18,6 +18,10 @@ const (
 	MetaEndIndex   = "end_idx"
 )
 
+type contextKey string
+
+const AllowedKnowledgeFilesContextKey contextKey = "allowed_knowledge_files"
+
 // Document 文档结构
 type Document struct {
 	ID       string         `json:"id"`
