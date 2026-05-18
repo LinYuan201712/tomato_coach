@@ -4,6 +4,10 @@
 import request from './request'
 import { API_BASE_URL, getToken } from './config'
 
+const STREAM_API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? API_BASE_URL
+  : 'http://localhost:8091/api'
+
 /**
  * 与AI对话
  * @param {Array} messages - 消息历史
@@ -47,10 +51,11 @@ export const chatWithAI = async (messages, deductTomato = true, useKnowledge = f
  */
 export const chatStreamWithAI = async (params, onMessage, onDone, onError) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/coach/chat/stream`, {
+    const response = await fetch(`${STREAM_API_BASE_URL}/coach/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
         'Authorization': `Bearer ${getToken()}`
       },
       body: JSON.stringify({
@@ -69,39 +74,51 @@ export const chatStreamWithAI = async (params, onMessage, onDone, onError) => {
     const decoder = new TextDecoder()
     let buffer = ''
 
+    const handleEventBlock = (block) => {
+      let eventName = 'message'
+      const dataLines = []
+
+      for (const line of block.split(/\r?\n/)) {
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim()
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trimStart())
+        }
+      }
+
+      if (dataLines.length === 0) return
+
+      const dataContent = dataLines.join('\n')
+      try {
+        const data = JSON.parse(dataContent)
+        if (eventName === 'done') {
+          onDone(data)
+        } else {
+          onMessage(data)
+        }
+      } catch (e) {
+        console.error('解析SSE数据失败:', e, dataContent)
+      }
+    }
+
     let reading = true
     while (reading) {
       const { value, done } = await reader.read()
       if (done) {
+        if (buffer.trim()) {
+          handleEventBlock(buffer)
+        }
         reading = false
         break
       }
       
       buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop()
+      const blocks = buffer.split(/\r?\n\r?\n/)
+      buffer = blocks.pop()
 
-      let currentEvent = ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed) continue
-
-        if (trimmed.startsWith('event:')) {
-          currentEvent = trimmed.replace('event:', '').trim()
-        } else if (trimmed.startsWith('data:')) {
-          const dataContent = trimmed.replace('data:', '').trim()
-          if (!dataContent) continue
-          
-          try {
-            const data = JSON.parse(dataContent)
-            if (currentEvent === 'message') {
-              onMessage(data)
-            } else if (currentEvent === 'done') {
-              onDone(data)
-            }
-          } catch (e) {
-            console.error('解析SSE数据失败:', e, dataContent)
-          }
+      for (const block of blocks) {
+        if (block.trim()) {
+          handleEventBlock(block)
         }
       }
     }
