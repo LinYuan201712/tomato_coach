@@ -301,13 +301,15 @@ export const moveKnowledge = async (fileID, targetFolderID) => {
  * 获取知识库文件预览内容
  */
 export const getKnowledgePreview = async (fileName) => {
-  try {
-    const response = await request.get(`${API_BASE_URL}/coach/knowledge/preview?fileName=${encodeURIComponent(fileName)}`)
-    return response.data?.content || ''
-  } catch (error) {
-    console.error('获取文件预览失败:', error)
-    return '无法加载文件预览内容。'
+  const response = await request.get(`${API_BASE_URL}/coach/knowledge/preview?fileName=${encodeURIComponent(fileName)}`)
+  if (response && response.success === false) {
+    throw new Error(response.message || '无法加载文件预览内容')
   }
+  const content = response.data?.content
+  if (content === undefined || content === null) {
+    throw new Error(response.message || '无法加载文件预览内容')
+  }
+  return content
 }
 
 /**

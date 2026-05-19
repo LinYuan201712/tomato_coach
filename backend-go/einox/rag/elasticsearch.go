@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
@@ -161,11 +160,7 @@ func (s *ElasticsearchStore) GetFullDocument(ctx context.Context, fileName strin
 		return "", err
 	}
 
-	var sb strings.Builder
-	for _, doc := range docs {
-		sb.WriteString(doc.Content)
-	}
-	return sb.String(), nil
+	return PickPreviewText(docs), nil
 }
 
 func (s *ElasticsearchStore) doSearch(ctx context.Context, body map[string]any, topK int) ([]*Document, error) {

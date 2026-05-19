@@ -556,7 +556,6 @@ func (r *SimpleRAG) getFullDocumentFromList(ctx context.Context, fileName string
 	}
 
 	matchedDocs := make([]*Document, 0)
-	var sb strings.Builder
 	for _, d := range docs {
 		metaFile, _ := d.MetaData[MetaFileName].(string)
 		if strings.TrimSpace(metaFile) != strings.TrimSpace(fileName) {
@@ -577,11 +576,7 @@ func (r *SimpleRAG) getFullDocumentFromList(ctx context.Context, fileName string
 		return matchedDocs[i].ID < matchedDocs[j].ID
 	})
 
-	for _, d := range matchedDocs {
-		sb.WriteString(d.Content)
-		sb.WriteString("\n")
-	}
-	return sb.String(), nil
+	return PickPreviewText(matchedDocs), nil
 }
 
 func documentUserID(d *Document) int64 {

@@ -26,6 +26,7 @@ type Config struct {
 
 // LangfuseConfig Langfuse 可观测性配置
 type LangfuseConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
 	SecretKey string `mapstructure:"secret_key"`
 	PublicKey string `mapstructure:"public_key"`
 	BaseURL   string `mapstructure:"base_url"`

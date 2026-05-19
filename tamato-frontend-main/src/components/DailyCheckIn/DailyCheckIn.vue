@@ -205,8 +205,8 @@ export default {
         ])
         
         if (currency) {
-          this.checkInDays = currency.check_day || 0
-          this.hasCheckedInToday = currency.has_checked_in_today || false
+          this.checkInDays = currency.month_check_days ?? currency.check_day ?? 0
+          this.hasCheckedInToday = Boolean(currency.has_checked_in_today)
         }
         
         // 处理用户信息：getCurrentUser返回的是ApiResponse格式 {success, data, message}
@@ -232,8 +232,8 @@ export default {
         try {
           const currency = await getCurrency()
           if (currency) {
-            this.checkInDays = currency.check_day || 0
-            this.hasCheckedInToday = currency.has_checked_in_today || false
+            this.checkInDays = currency.month_check_days ?? currency.check_day ?? 0
+            this.hasCheckedInToday = Boolean(currency.has_checked_in_today)
           }
           const userResponse = await getCurrentUser().catch(() => null)
           // 处理用户信息：getCurrentUser返回的是ApiResponse格式
@@ -257,20 +257,17 @@ export default {
     },
     
     updateCheckedDates(checkInDateStrings = []) {
-      // 清空已签到的日期集合
-      this.checkedDates.clear()
-      
-      // 添加所有已签到的日期
-      checkInDateStrings.forEach(dateStr => {
-        this.checkedDates.add(dateStr)
+      const next = new Set()
+      ;(checkInDateStrings || []).forEach(dateStr => {
+        if (dateStr) {
+          next.add(String(dateStr).slice(0, 10))
+        }
       })
-      
-      // 如果今天已签到但不在列表中，确保添加今天
       if (this.hasCheckedInToday) {
-        const today = new Date()
-        const todayStr = this.formatDate(today)
-        this.checkedDates.add(todayStr)
+        next.add(this.formatDate(new Date()))
       }
+      // 整体替换 Set，确保 Vue 2 能触发日历重新渲染
+      this.checkedDates = next
     },
     
     async handleCheckIn() {
@@ -292,8 +289,8 @@ export default {
       } catch (error) {
         console.error('签到失败:', error)
         const errorMessage = error.message || '签到失败，请稍后重试'
-        if (errorMessage.includes('今日已签到')) {
-          alert('今日已签到，请明天再来')
+        if (errorMessage.includes('今日已签到') || errorMessage.includes('今天已签到')) {
+          this.hasCheckedInToday = true
           await this.loadCheckInStatus()
         } else {
           alert(errorMessage)

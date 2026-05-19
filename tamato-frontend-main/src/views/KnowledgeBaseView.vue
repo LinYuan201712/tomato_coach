@@ -302,13 +302,15 @@
           <div class="empty-icon">📄</div>
           <p>选择文件进行预览</p>
         </div>
-        <div 
-          v-for="(tab, index) in previewTabs" 
+        <div
+          v-for="(tab, index) in previewTabs"
           :key="tab.file.id"
           v-show="activeTabIndex === index"
-          class="tab-content-wrapper markdown-body"
-          v-html="tab.content"
-        ></div>
+          class="tab-content-wrapper"
+        >
+          <div v-if="tab.loading" class="loading-preview">正在加载预览...</div>
+          <div v-else class="markdown-body" v-html="tab.content"></div>
+        </div>
       </div>
     </div>
 
@@ -354,7 +356,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { 
   listKnowledge, listFolders, uploadKnowledge, deleteKnowledge, 
   renameKnowledge, createFolder, deleteFolder, getKnowledgePreview,
@@ -368,6 +370,43 @@ const md = new MarkdownIt({
   linkify: true,
   breaks: true
 })
+
+const MAX_PREVIEW_CHARS = 120000
+
+function sanitizePreviewMarkdown(raw) {
+  if (!raw) return ''
+  let text = raw
+  // MinerU 常输出超大 mermaid 块，会导致 md.render 卡死
+  text = text.replace(/```mermaid[\s\S]*?```/gi, '\n\n> 图表已省略（预览优化）\n\n')
+  if (text.length > MAX_PREVIEW_CHARS) {
+    text = `${text.slice(0, MAX_PREVIEW_CHARS)}\n\n---\n\n*预览仅显示前 ${Math.round(MAX_PREVIEW_CHARS / 10000)} 万字。*`
+  }
+  return text
+}
+
+function renderPreviewHtml(raw) {
+  const text = (raw || '').trim()
+  if (!text) {
+    return '<div class="error-preview">文件内容为空</div>'
+  }
+  try {
+    if (!/^#|\*|- |```|\[.+\]\(.+\)/m.test(text)) {
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+      return `<pre class="word-preview-text">${escaped}</pre>`
+    }
+    return md.render(sanitizePreviewMarkdown(text))
+  } catch (e) {
+    console.error('Markdown 渲染失败:', e)
+    return '<div class="error-preview">预览渲染失败，文件已入库可正常使用 AI 问答。</div>'
+  }
+}
+
+function isTabContentReady(tab) {
+  return tab.content && !tab.content.includes('loading-preview')
+}
 
 // 数据状态
 const folders = ref([])
@@ -602,26 +641,34 @@ const goBack = () => {
 }
 
 const previewFile = async (file) => {
-  // 检查是否已经打开
-  const existingIndex = previewTabs.value.findIndex(tab => tab.file.id === file.id)
-  if (existingIndex !== -1) {
-    activeTabIndex.value = existingIndex
-    return
+  let tabIndex = previewTabs.value.findIndex(tab => tab.file.id === file.id)
+
+  if (tabIndex !== -1) {
+    activeTabIndex.value = tabIndex
+    const tab = previewTabs.value[tabIndex]
+    if (!tab.loading && isTabContentReady(tab)) {
+      return
+    }
+  } else {
+    previewTabs.value.push({ file, content: '', loading: true })
+    tabIndex = previewTabs.value.length - 1
+    activeTabIndex.value = tabIndex
   }
 
-  // 新增标签
-  const newTab = {
-    file: file,
-    content: '<div class="loading-preview">正在加载预览...</div>'
-  }
-  previewTabs.value.push(newTab)
-  activeTabIndex.value = previewTabs.value.length - 1
+  previewTabs.value[tabIndex].loading = true
+  previewTabs.value[tabIndex].content = ''
+  await nextTick()
 
   try {
-    const content = await getKnowledgePreview(file.name)
-    newTab.content = md.render(content || '# 文件内容为空')
+    const raw = await getKnowledgePreview(file.name)
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    previewTabs.value[tabIndex].content = renderPreviewHtml(raw)
   } catch (err) {
-    newTab.content = '<div class="error-preview">内容加载失败</div>'
+    console.error('预览失败:', err)
+    const msg = err?.message || err?.data?.message || '内容加载失败，请删除该文件后重新上传'
+    previewTabs.value[tabIndex].content = `<div class="error-preview">${msg}</div>`
+  } finally {
+    previewTabs.value[tabIndex].loading = false
   }
 }
 
@@ -1303,6 +1350,18 @@ onUnmounted(() => {
 .markdown-body {
   font-size: 15px;
   line-height: 1.6;
+}
+
+.word-preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 
 .loading-preview, .error-preview {

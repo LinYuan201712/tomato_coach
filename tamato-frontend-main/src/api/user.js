@@ -1,5 +1,6 @@
 import request from './request'
 import { API_BASE_URL, getToken } from './config'
+import { unwrapApiData } from './response'
 
 // 设置用户状态为离线（用于页面关闭时调用）
 // 通过 userId 精确更新，避免多窗口/多账号互相影响
@@ -111,23 +112,28 @@ export const updateCurrentUserPrivacy = async (data) => {
 
 // 获取当前用户资产信息（包括签到天数）
 export const getCurrency = async () => {
-  return request.get(`${API_BASE_URL}/me/currency`)
+  const response = await request.get(`${API_BASE_URL}/me/currency`)
+  return unwrapApiData(response)
 }
 
 // 每日签到
 export const checkIn = async () => {
-  return request.post(`${API_BASE_URL}/me/checkin`)
+  const response = await request.post(`${API_BASE_URL}/me/checkin`)
+  return unwrapApiData(response)
 }
 
 // 获取本月所有签到日期
 export const getCurrentMonthCheckInDates = async () => {
-  return request.get(`${API_BASE_URL}/me/checkin/dates`)
+  const response = await request.get(`${API_BASE_URL}/me/checkin/dates`)
+  const data = unwrapApiData(response)
+  return Array.isArray(data) ? data : []
 }
 
 // 补签功能
 export const makeupCheckIn = async (date) => {
   // date格式: 'YYYY-MM-DD'
-  return request.post(`${API_BASE_URL}/me/checkin/makeup?date=${encodeURIComponent(date)}`, null)
+  const response = await request.post(`${API_BASE_URL}/me/checkin/makeup?date=${encodeURIComponent(date)}`, null)
+  return unwrapApiData(response)
 }
 
 // 开始专注
