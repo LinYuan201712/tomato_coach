@@ -16,6 +16,7 @@ const (
 	MetaUserID     = "user_id"
 	MetaStartIndex = "start_idx"
 	MetaEndIndex   = "end_idx"
+	MetaFullText   = "full_text" // 上传时的完整正文，用于预览
 )
 
 type contextKey string

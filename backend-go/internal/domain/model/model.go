@@ -112,11 +112,13 @@ type UpdateUserPrivacyRequest struct {
 
 // CurrencyResponse 用户货币信息响应
 type CurrencyResponse struct {
-	UserID    int64  `json:"user_id,string"`
-	Coins     int    `json:"coins"`
-	Tomato    int    `json:"tomato"`
-	CheckDay  int    `json:"check_day"`
-	UpdatedAt string `json:"updated_at"`
+	UserID            int64  `json:"user_id,string"`
+	Coins             int    `json:"coins"`
+	Tomato            int    `json:"tomato"`
+	CheckDay          int    `json:"check_day"`           // 累计签到天数
+	MonthCheckDays    int    `json:"month_check_days"`    // 本月签到天数
+	HasCheckedInToday bool   `json:"has_checked_in_today"`
+	UpdatedAt         string `json:"updated_at"`
 }
 
 // ========== 任务相关 ==========

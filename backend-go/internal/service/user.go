@@ -314,17 +314,31 @@ func (s *userService) GetUserCurrency(ctx context.Context, userID int64) (*model
 		}
 	}
 
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	hasCheckedToday := false
+	if todayCount, err := s.checkinRepo.CountByUserAndDate(ctx, userID, today); err == nil && todayCount > 0 {
+		hasCheckedToday = true
+	}
+	monthCheckDays, err := s.GetCheckinCount(ctx, userID)
+	if err != nil {
+		monthCheckDays = 0
+	}
+
 	return &model.CurrencyResponse{
-		UserID:    currency.UserID,
-		Coins:     currency.Coins,
-		CheckDay:  currency.CheckDay,
-		UpdatedAt: currency.UpdatedAt.Format("2006-01-02"),
+		UserID:            currency.UserID,
+		Coins:             currency.Coins,
+		CheckDay:          currency.CheckDay,
+		MonthCheckDays:    monthCheckDays,
+		HasCheckedInToday: hasCheckedToday,
+		UpdatedAt:         currency.UpdatedAt.Format("2006-01-02"),
 	}, nil
 }
 
 // Checkin 用户签到
 func (s *userService) Checkin(ctx context.Context, userID int64) error {
-	today := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	// 检查今天是否已签到
 	count, err := s.checkinRepo.CountByUserAndDate(ctx, userID, today)
@@ -334,7 +348,7 @@ func (s *userService) Checkin(ctx context.Context, userID int64) error {
 	}
 
 	if count > 0 {
-		return errors.New(errors.CodeBusinessError, "今天已签到")
+		return errors.New(errors.CodeValidationError, "今天已签到")
 	}
 
 	// 创建签到记录

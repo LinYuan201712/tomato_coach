@@ -19,6 +19,7 @@ import (
 	"github.com/tomato/backend/einox/workflow"
 	"github.com/tomato/backend/internal/domain/constants"
 	"github.com/tomato/backend/internal/domain/entity"
+	"github.com/tomato/backend/internal/pkg/errors"
 	"github.com/tomato/backend/internal/pkg/logger"
 	"github.com/tomato/backend/internal/repository"
 	"gorm.io/gorm"
@@ -389,6 +390,14 @@ func (s *coachService) UploadKnowledge(ctx context.Context, userID int64, fileNa
 		FileSize:    int64(len(content)),
 		Status:      status,
 	}
+	// 同名文件重新上传：清理旧数据库记录与 RAG 索引，避免预览读到旧的二进制分片
+	_ = s.rag.DeleteFile(ctx, fileName, userID)
+	if err := s.db.WithContext(ctx).
+		Where("user_id = ? AND file_name = ?", userID, fileName).
+		Delete(&entity.KnowledgeFile{}).Error; err != nil {
+		return fmt.Errorf("清理旧文件记录失败: %w", err)
+	}
+
 	if err := s.db.WithContext(ctx).Create(file).Error; err != nil {
 		return fmt.Errorf("保存文件元数据失败: %w", err)
 	}
@@ -438,14 +447,24 @@ func (s *coachService) UploadKnowledge(ctx context.Context, userID int64, fileNa
 		return nil
 	}
 
-	// 3. 非 PDF，直接存入 RAG 索引
-	text := string(content)
-	metadata := map[string]any{
-		"file_name":   fileName,
-		"user_id":     userID,
-		"file_id":     file.ID,
-		"upload_time": file.CreatedAt.Unix(),
+	// 3. 非 PDF：解析 Word/Markdown/文本 后再索引
+	text, err := rag.ExtractText(fileName, content)
+	if err != nil {
+		_ = s.db.WithContext(ctx).Delete(file).Error
+		return fmt.Errorf("解析文件内容失败: %w", err)
 	}
+
+	metadata := map[string]any{
+		rag.MetaFileName:   fileName,
+		rag.MetaUserID:     userID,
+		"file_id":          file.ID,
+		"upload_time":      file.CreatedAt.Unix(),
+		rag.MetaFullText:   text,
+	}
+	if rag.IsDocx(fileName) {
+		metadata["_extension"] = ".md"
+	}
+	s.logger.Infof("[Knowledge] 已解析 %s，文本长度 %d 字符", fileName, len([]rune(text)))
 
 	return s.rag.AddText(ctx, text, metadata)
 }
@@ -604,8 +623,16 @@ func (s *coachService) GetHistory(ctx context.Context, userID int64, sessionID s
 func (s *coachService) GetKnowledgePreview(ctx context.Context, userID int64, fileName string) (string, error) {
 	fileName = strings.TrimSpace(fileName)
 	content, err := s.rag.GetFullDocument(ctx, fileName, userID)
-	if err != nil || strings.TrimSpace(content) != "" {
+	if err != nil {
 		return content, err
+	}
+	content = strings.TrimSpace(content)
+	if content != "" && rag.IsBinaryGarbledText(content) {
+		s.logger.Warnf("[Preview] 文件 %s 索引内容为旧版二进制乱码，请删除后重新上传", fileName)
+		return "", errors.New(errors.CodeValidationError, "该文件为旧版乱码索引，请删除后重新上传 docx")
+	}
+	if content != "" {
+		return content, nil
 	}
 
 	var file entity.KnowledgeFile
