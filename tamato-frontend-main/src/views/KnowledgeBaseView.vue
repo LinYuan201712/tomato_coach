@@ -1,23 +1,11 @@
 <template>
   <div class="knowledge-base-container">
-    <!-- 顶部导航栏 (完美同步 HomeView 风格) -->
     <nav class="kb-navbar">
       <div class="nav-brand" @click="$router.push('/home')">Tomato</div>
-      <div class="nav-links">
-        <a class="nav-link" @click="$router.push('/friends')">好友</a>
-        <a class="nav-link active">知识库</a>
-        <a class="nav-link" @click="$router.push('/task-management')">任务管理</a>
-        <a class="nav-link" @click="$router.push('/personal-center')">个人中心</a>
-      </div>
-      <div class="user-avatar-container">
-        <div class="user-name">{{ userInfo.username || 'User' }}</div>
-        <div class="user-avatar-box">
-          <img :src="displayAvatar" alt="用户头像" @error="handleAvatarError" />
-        </div>
-      </div>
+      <button class="nav-home-link" @click="$router.push('/home')">返回首页</button>
     </nav>
 
-    <div class="kb-content" :style="{ marginRight: contentMarginRight + 'px' }">
+    <div class="kb-content">
       <!-- 页面标题与工具栏 -->
       <div class="page-header">
         <div class="header-left">
@@ -363,7 +351,6 @@ import {
   moveKnowledge
 } from '@/api/ai'
 import MarkdownIt from 'markdown-it'
-import defaultAvatar from '@/assets/images/avatar.png'
 
 const md = new MarkdownIt({
   html: true,
@@ -413,22 +400,6 @@ const folders = ref([])
 const allFiles = ref([])
 const currentFolderID = ref(0)
 const currentFolderName = ref('')
-const userInfo = ref({
-  username: localStorage.getItem('username') || 'User',
-  avatar: localStorage.getItem('avatar') || ''
-})
-
-// 头像处理逻辑 (同步 HomeView)
-const displayAvatar = computed(() => {
-  const avatar = userInfo.value.avatar
-  if (!avatar) return defaultAvatar
-  if (avatar.startsWith('http') || avatar.startsWith('data:')) return avatar
-  return `http://localhost:8090${avatar.startsWith('/') ? '' : '/'}${avatar}`
-})
-
-const handleAvatarError = (e) => {
-  e.target.src = defaultAvatar
-}
 
 // 计算最近文件
 const recentFiles = computed(() => {
@@ -495,11 +466,6 @@ const stopResize = () => {
   document.body.style.cursor = 'default'
   document.body.style.userSelect = 'auto'
 }
-
-// 动态计算主内容边距
-const contentMarginRight = computed(() => {
-  return previewTabs.value.length > 0 ? panelWidth.value : 0
-})
 
 // 模态框状态
 const modal = ref({
@@ -807,68 +773,30 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.nav-links {
-  display: flex;
-  gap: 32px;
-}
-
-.nav-link {
-  text-decoration: none;
-  color: #4a4a4a;
-  font-weight: 500;
+.nav-home-link {
+  border: none;
+  background: transparent;
+  color: #333;
   cursor: pointer;
-  position: relative;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 8px 12px;
+  transition: color 0.2s ease;
 }
 
-.nav-link.active {
+.nav-home-link:hover {
   color: #eeaa67;
-}
-
-.nav-link.active::after {
-  content: '';
-  position: absolute;
-  bottom: -8px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: #eeaa67;
-}
-
-.user-avatar-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.user-name {
-  font-weight: 500;
-  color: #666;
-  font-size: 14px;
-}
-
-.user-avatar-box {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.user-avatar-box img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 /* 内容布局 */
 .kb-content {
   flex: 1;
-  max-width: 1200px;
+  max-width: 1540px;
   width: 100%;
-  margin: 0 auto;
-  padding: 40px 20px;
-  transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 40px 48px;
 }
 
 .knowledge-base-container {
@@ -1619,5 +1547,35 @@ onUnmounted(() => {
 
 .panel-resizer:hover {
   background: rgba(238, 170, 103, 0.2);
+}
+
+@media (max-width: 768px) {
+  .kb-navbar {
+    padding: 0 20px;
+  }
+
+  .nav-home-link {
+    font-size: 16px;
+    padding-right: 0;
+  }
+
+  .kb-content {
+    padding: 28px 20px;
+  }
+
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .toolbar {
+    width: 100%;
+  }
+
+  .search-box-container {
+    max-width: none;
+    margin-right: 0;
+  }
 }
 </style>
