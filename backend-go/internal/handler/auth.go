@@ -50,6 +50,23 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	h.Success(c, resp)
 }
 
+// SendVerificationCode 发送邮箱验证码
+func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
+	var req model.SendVerificationCodeRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.BadRequest(c, "请求参数错误")
+		return
+	}
+
+	if err := h.authService.SendVerificationCode(c.Request.Context(), &req); err != nil {
+		h.Error(c, err)
+		return
+	}
+
+	h.Success(c, nil)
+}
+
 // Login 用户登录
 // @Summary 用户登录
 // @Description 用户登录，支持用户名/邮箱/电话登录，返回JWT token

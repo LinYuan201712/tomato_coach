@@ -22,10 +22,16 @@ type PageResponse struct {
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Email    string `json:"email" binding:"required,email"`
-	Phone    string `json:"phone" binding:"required"`
-	Password string `json:"password" binding:"required,min=6,max=128"`
+	Username         string `json:"username" binding:"required,min=3,max=50"`
+	Email            string `json:"email" binding:"required,email"`
+	Phone            string `json:"phone" binding:"omitempty"`
+	Password         string `json:"password" binding:"required,min=6,max=128"`
+	VerificationCode string `json:"verificationCode" binding:"required,len=6,numeric"`
+}
+
+// SendVerificationCodeRequest 鍙戦€侀獙璇佺爜璇锋眰
+type SendVerificationCodeRequest struct {
+	Email string `json:"email" binding:"required,email"`
 }
 
 // LoginRequest 登录请求
@@ -58,15 +64,15 @@ type UserResponse struct {
 
 // UserInfoResponse 用户详细信息响应（当前用户）
 type UserInfoResponse struct {
-	UserID   int64      `json:"user_id,string"`
-	Username string     `json:"username"`
-	Status   string     `json:"status"`
-	Email    string     `json:"email"`
-	Phone    string     `json:"phone"`
-	Sex      string     `json:"sex"`
-	Birthday *time.Time `json:"birthday"`
-	Tomato   int        `json:"tomato"`
-	Province string     `json:"province"`
+	UserID        int64      `json:"user_id,string"`
+	Username      string     `json:"username"`
+	Status        string     `json:"status"`
+	Email         string     `json:"email"`
+	Phone         string     `json:"phone"`
+	Sex           string     `json:"sex"`
+	Birthday      *time.Time `json:"birthday"`
+	Tomato        int        `json:"tomato"`
+	Province      string     `json:"province"`
 	Avatar        string     `json:"avatar"`
 	CurrentRoomID int64      `json:"current_room_id,string"`
 }
@@ -132,12 +138,12 @@ type TaskCreateRequest struct {
 
 // TaskUpdateRequest 更新任务请求
 type TaskUpdateRequest struct {
-	TaskID   int64  `json:"task_id,string"`
-	TaskId   int64  `json:"taskId,string"` // 兼容前端 camelCase
-	TaskName string `json:"task_name" binding:"omitempty,max=20"`
-	TaskNote string `json:"task_note" binding:"omitempty,max=200"`
-	Duration int    `json:"duration" binding:"omitempty,gt=0"`
-	Status   string `json:"status" binding:"omitempty"`
+	TaskID     int64  `json:"task_id,string"`
+	TaskId     int64  `json:"taskId,string"` // 兼容前端 camelCase
+	TaskName   string `json:"task_name" binding:"omitempty,max=20"`
+	TaskNote   string `json:"task_note" binding:"omitempty,max=200"`
+	Duration   int    `json:"duration" binding:"omitempty,gt=0"`
+	Status     string `json:"status" binding:"omitempty"`
 	TaskStatus string `json:"taskStatus" binding:"omitempty"` // 兼容前端
 }
 

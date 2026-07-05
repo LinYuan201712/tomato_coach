@@ -55,6 +55,16 @@ func main() {
 	// 5. 初始化认证相关
 	passwordManager := auth.NewPasswordManager()
 	tokenManager := auth.NewTokenManager(cfg.JWT.Secret, cfg.JWT.Expiration)
+	emailSender := service.NewSMTPEmailSender(service.SMTPEmailConfig{
+		Enabled:     cfg.Mail.Enabled,
+		Host:        cfg.Mail.Host,
+		Port:        cfg.Mail.Port,
+		Username:    cfg.Mail.Username,
+		Password:    cfg.Mail.Password,
+		FromAddress: cfg.Mail.FromAddress,
+		FromName:    cfg.Mail.FromName,
+		UseTLS:      cfg.Mail.UseTLS,
+	}, appLogger)
 
 	// 6. 初始化Repository
 	userRepo := repository.NewUserRepository(db)
@@ -80,6 +90,7 @@ func main() {
 		passwordManager,
 		tokenManager,
 		idGenerator,
+		emailSender,
 		appLogger,
 	)
 

@@ -4,7 +4,7 @@
       <div class="nav-brand" @click="$router.push('/home')">Tomato</div>
       <div class="nav-title">学习报告成就看板</div>
       <div class="nav-actions">
-        <button class="btn-back" @click="$router.push('/home')">返回主页</button>
+        <button class="btn-back" @click="$router.push('/home')">返回首页</button>
       </div>
     </nav>
 
@@ -182,6 +182,30 @@ export default {
   font-size: 1.2rem;
   font-weight: 600;
   color: #636e72;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 120px;
+}
+
+.btn-back {
+  border: none;
+  background: transparent;
+  color: #333;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.5rem 0;
+  transition: color 0.2s ease;
+}
+
+.btn-back:hover {
+  color: #eeaa67;
 }
 
 .report-content {

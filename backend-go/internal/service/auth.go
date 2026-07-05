@@ -20,6 +20,7 @@ import (
 
 // AuthService 认证服务接口
 type AuthService interface {
+	SendVerificationCode(ctx context.Context, req *model.SendVerificationCodeRequest) error
 	Register(ctx context.Context, req *model.RegisterRequest) (*model.AuthResponse, error)
 	Login(ctx context.Context, req *model.LoginRequest) (*model.AuthResponse, error)
 	Logout(ctx context.Context, userID int64) error
@@ -34,6 +35,7 @@ type authService struct {
 	passwordManager *auth.PasswordManager
 	tokenManager    *auth.TokenManager
 	idGenerator     *snowflake.Node
+	emailSender     EmailSender
 	logger          *logger.Logger
 }
 
@@ -45,6 +47,7 @@ func NewAuthService(
 	passwordManager *auth.PasswordManager,
 	tokenManager *auth.TokenManager,
 	idGenerator *snowflake.Node,
+	emailSender EmailSender,
 	logger *logger.Logger,
 ) AuthService {
 	return &authService{
@@ -54,6 +57,7 @@ func NewAuthService(
 		passwordManager: passwordManager,
 		tokenManager:    tokenManager,
 		idGenerator:     idGenerator,
+		emailSender:     emailSender,
 		logger:          logger,
 	}
 }
@@ -67,6 +71,10 @@ func (s *authService) Register(ctx context.Context, req *model.RegisterRequest) 
 
 	// 2. 检查用户是否已存在
 	if err := s.checkUserExists(ctx, req.Username, req.Email, req.Phone); err != nil {
+		return nil, err
+	}
+
+	if err := s.verifyEmailCode(req.Email, req.VerificationCode); err != nil {
 		return nil, err
 	}
 
@@ -223,10 +231,6 @@ func (s *authService) validateRegisterRequest(req *model.RegisterRequest) error 
 		return errors.New(errors.CodeValidationError, "邮箱不能为空")
 	}
 
-	if strings.TrimSpace(req.Phone) == "" {
-		return errors.New(errors.CodeValidationError, "手机号不能为空")
-	}
-
 	if err := s.passwordManager.ValidatePassword(req.Password); err != nil {
 		return err
 	}
@@ -247,8 +251,10 @@ func (s *authService) checkUserExists(ctx context.Context, username, email, phon
 	}
 
 	// 检查电话
-	if user, _ := s.userRepo.FindByPhone(ctx, phone); user != nil {
-		return errors.New(errors.CodePhoneExists, constants.ErrMsgPhoneExists)
+	if strings.TrimSpace(phone) != "" {
+		if user, _ := s.userRepo.FindByPhone(ctx, phone); user != nil {
+			return errors.New(errors.CodePhoneExists, constants.ErrMsgPhoneExists)
+		}
 	}
 
 	return nil

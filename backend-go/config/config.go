@@ -20,8 +20,21 @@ type Config struct {
 	RAG      RAGConfig      `mapstructure:"rag"`
 	Elastic  ElasticConfig  `mapstructure:"elasticsearch"`
 	Channels ChannelsConfig `mapstructure:"channels"`
+	Mail     MailConfig     `mapstructure:"mail"`
 	Langfuse LangfuseConfig `mapstructure:"langfuse"`
 	MinerU   MinerUConfig   `mapstructure:"mineru"`
+}
+
+// MailConfig SMTP 邮件配置
+type MailConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	Host        string `mapstructure:"host"`
+	Port        int    `mapstructure:"port"`
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	FromAddress string `mapstructure:"from_address"`
+	FromName    string `mapstructure:"from_name"`
+	UseTLS      bool   `mapstructure:"use_tls"`
 }
 
 // LangfuseConfig Langfuse 可观测性配置
@@ -54,7 +67,7 @@ type FeishuChannelConfig struct {
 	Domain            string   `mapstructure:"domain"`
 	AllowedIDs        []string `mapstructure:"allowed_ids"`
 	DMPolicy          string   `mapstructure:"dm_policy"`
-	CronOutputChatID string   `mapstructure:"cron_output_chat_id"`
+	CronOutputChatID  string   `mapstructure:"cron_output_chat_id"`
 }
 
 // AliyunConfig 阿里云 DashScope 配置
@@ -197,7 +210,18 @@ func bindEnvVars(v *viper.Viper) {
 	_ = v.BindEnv("channels.feishu.app_id", "FEISHU_APP_ID")
 	_ = v.BindEnv("channels.feishu.app_secret", "FEISHU_APP_SECRET")
 
+	// 邮件配置
+	_ = v.BindEnv("mail.enabled", "TOMATO_MAIL_ENABLED")
+	_ = v.BindEnv("mail.host", "TOMATO_MAIL_HOST")
+	_ = v.BindEnv("mail.port", "TOMATO_MAIL_PORT")
+	_ = v.BindEnv("mail.username", "TOMATO_MAIL_USERNAME")
+	_ = v.BindEnv("mail.password", "TOMATO_MAIL_PASSWORD")
+	_ = v.BindEnv("mail.from_address", "TOMATO_MAIL_FROM_ADDRESS")
+	_ = v.BindEnv("mail.from_name", "TOMATO_MAIL_FROM_NAME")
+	_ = v.BindEnv("mail.use_tls", "TOMATO_MAIL_USE_TLS")
+
 	// Langfuse 配置
+	_ = v.BindEnv("langfuse.enabled", "LANGFUSE_ENABLED")
 	_ = v.BindEnv("langfuse.secret_key", "LANGFUSE_SECRET_KEY")
 	_ = v.BindEnv("langfuse.public_key", "LANGFUSE_PUBLIC_KEY")
 	_ = v.BindEnv("langfuse.base_url", "LANGFUSE_BASE_URL")
@@ -318,6 +342,17 @@ func setDefaults(cfg *Config) {
 	// 渠道默认值
 	if cfg.Channels.Feishu.Domain == "" {
 		cfg.Channels.Feishu.Domain = "feishu"
+	}
+
+	// 邮件默认值
+	if cfg.Mail.Port == 0 {
+		cfg.Mail.Port = 465
+	}
+	if cfg.Mail.FromName == "" {
+		cfg.Mail.FromName = "Tomato Coach"
+	}
+	if cfg.Mail.FromAddress == "" {
+		cfg.Mail.FromAddress = cfg.Mail.Username
 	}
 
 	// Langfuse 默认值

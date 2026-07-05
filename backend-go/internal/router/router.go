@@ -51,6 +51,7 @@ func SetupRoutes(
 		// ========== 认证路由（不需要认证）==========
 		auth := api.Group("/auth")
 		{
+			auth.POST("/send-verification-code", authHandler.SendVerificationCode)
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 		}
@@ -84,7 +85,7 @@ func SetupRoutes(
 				me.POST("/checkin", userHandler.Checkin)
 				me.GET("/checkin/dates", userHandler.GetCheckinDates)
 				me.GET("/tasks", taskHandler.GetTaskList) // 前端获取任务列表路径
-				
+
 				// 渠道配置
 				feishu := me.Group("/channels/feishu")
 				{

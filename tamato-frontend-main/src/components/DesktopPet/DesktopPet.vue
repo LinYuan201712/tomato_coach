@@ -9,7 +9,33 @@
   >
     <!-- 桌宠主体 -->
     <div class="pet-body" :class="animationClass" :style="bodyStyle">
-      <div class="pet-emoji">🍅</div>
+      <svg class="tomato-pet" viewBox="0 0 160 150" aria-hidden="true">
+        <g class="tomato-body">
+          <polygon class="tomato-outline" points="40,42 120,42 120,48 134,48 134,56 144,56 144,70 152,70 152,112 144,112 144,126 134,126 134,136 118,136 118,144 42,144 42,136 26,136 26,126 16,126 16,112 8,112 8,70 16,70 16,56 26,56 26,48 40,48" />
+          <polygon class="tomato-fill" points="42,50 118,50 118,56 132,56 132,64 140,64 140,76 148,76 148,108 140,108 140,122 130,122 130,132 114,132 114,138 46,138 46,132 30,132 30,122 20,122 20,108 14,108 14,76 20,76 20,64 30,64 30,56 42,56" />
+          <polygon class="tomato-bright" points="28,64 42,64 42,58 54,58 54,70 42,70 42,82 34,82 34,106 26,106 26,122 20,122 20,76 28,76" />
+          <polygon class="tomato-edge-shadow" points="132,64 140,64 140,76 148,76 148,108 140,108 140,122 130,122 130,132 114,132 114,138 94,138 94,132 116,132 116,126 126,126 126,116 134,116 134,98 140,98 140,78 132,78" />
+          <rect class="tomato-bottom-shadow" x="52" y="136" width="56" height="8" />
+        </g>
+
+        <g class="tomato-crown">
+          <polygon class="leaf-outline" points="28,84 28,48 44,48 44,36 56,36 56,28 64,28 64,4 96,4 96,28 104,28 104,36 116,36 116,48 132,48 132,84 104,84 104,76 92,76 92,66 84,66 84,78 76,78 76,66 68,66 68,76 56,76 56,84" />
+          <polygon class="leaf-main" points="36,76 36,56 50,56 50,44 62,44 62,36 72,36 72,12 88,12 88,36 98,36 98,44 110,44 110,56 124,56 124,76 100,76 100,68 88,68 88,58 82,58 82,70 78,70 78,58 72,58 72,68 60,68 60,76" />
+          <polygon class="leaf-light" points="38,56 52,56 52,66 62,66 62,74 38,74" />
+          <polygon class="leaf-mid" points="66,38 78,38 78,56 96,56 96,68 84,68 84,60 76,60 76,68 66,68" />
+          <polygon class="leaf-dark" points="88,12 96,12 96,36 106,36 106,48 126,48 126,76 110,76 110,66 98,66 98,54 88,54" />
+          <rect class="leaf-cut" x="74" y="18" width="12" height="18" />
+        </g>
+
+        <g class="tomato-face-pixels">
+          <rect class="tomato-eye" x="52" y="84" width="8" height="18" />
+          <rect class="tomato-eye" x="100" y="84" width="8" height="18" />
+          <rect class="tomato-cheek" x="22" y="104" width="15" height="10" />
+          <rect class="tomato-cheek" x="120" y="104" width="15" height="10" />
+          <rect class="tomato-mouth" x="64" y="112" width="32" height="8" />
+          <rect class="tomato-mouth" x="64" y="120" width="8" height="4" />
+        </g>
+      </svg>
     </div>
     
     <!-- 提示信息 -->
@@ -23,10 +49,10 @@
     </div>
     
     <!-- 功能菜单 -->
-    <div v-if="showMenu" class="pet-menu" :class="{ 'menu-visible': showMenu }">
+    <div v-if="showMenu || chatNotice.visible" class="pet-menu" :class="{ 'menu-visible': showMenu || chatNotice.visible, 'notice-menu': chatNotice.visible }">
       <div class="menu-item" @click="openChat">
-        <span class="menu-icon">💬</span>
-        <span class="menu-text">聊天</span>
+        <span class="menu-icon">{{ chatNotice.icon || '💬' }}</span>
+        <span class="menu-text">{{ chatNotice.text || '聊天' }}</span>
       </div>
     </div>
     
@@ -34,6 +60,8 @@
     <ChatDialog 
       :visible="showChatDialog" 
       @close="closeChatDialog" 
+      @message-started="handleMessageStarted"
+      @message-generated="handleMessageGenerated"
       @mousedown.stop
     />
   </div>
@@ -75,6 +103,12 @@ export default {
       showMenu: false,
       menuTimer: null,
       showChatDialog: false,
+      chatNotice: {
+        visible: false,
+        text: '',
+        icon: ''
+      },
+      chatNoticeTimer: null,
       
       // 待机动画
       idleAnimationTimer: null
@@ -123,8 +157,8 @@ export default {
   methods: {
     initPet() {
       // 初始化位置（右下角）
-      this.x = Math.max(20, window.innerWidth - 100)
-      this.y = Math.max(20, window.innerHeight - 100)
+      this.x = Math.max(20, window.innerWidth - 150)
+      this.y = Math.max(20, window.innerHeight - 140)
     },
     
     // 拖拽功能
@@ -138,8 +172,8 @@ export default {
     
     onMouseMove(e) {
       if (this.isDragging) {
-        this.x = Math.max(0, Math.min(e.clientX - this.dragOffset.x, window.innerWidth - 80))
-        this.y = Math.max(0, Math.min(e.clientY - this.dragOffset.y, window.innerHeight - 80))
+        this.x = Math.max(0, Math.min(e.clientX - this.dragOffset.x, window.innerWidth - 136))
+        this.y = Math.max(0, Math.min(e.clientY - this.dragOffset.y, window.innerHeight - 128))
         
         // 根据移动方向改变朝向
         if (e.movementX > 0) {
@@ -194,6 +228,7 @@ export default {
     openChat() {
       this.showChatDialog = true
       this.showMenu = false
+      this.hideChatNotice()
       this.stopAutoMove() // 开启聊天时停止移动
       if (this.menuTimer) {
         clearTimeout(this.menuTimer)
@@ -204,6 +239,47 @@ export default {
     closeChatDialog() {
       this.showChatDialog = false
       this.startAutoMove() // 关闭聊天时恢复移动
+    },
+
+    handleMessageStarted() {
+      if (this.chatNoticeTimer) {
+        clearTimeout(this.chatNoticeTimer)
+        this.chatNoticeTimer = null
+      }
+      this.chatNotice = {
+        visible: true,
+        text: '对话生成中...',
+        icon: '💬'
+      }
+    },
+
+    handleMessageGenerated() {
+      this.chatNotice = {
+        visible: true,
+        text: '对话已生成',
+        icon: '✅'
+      }
+      this.animationState = 'happy'
+      setTimeout(() => {
+        if (!this.isDragging) {
+          this.animationState = 'idle'
+        }
+      }, 700)
+      this.chatNoticeTimer = setTimeout(() => {
+        this.hideChatNotice()
+      }, 8000)
+    },
+
+    hideChatNotice() {
+      if (this.chatNoticeTimer) {
+        clearTimeout(this.chatNoticeTimer)
+        this.chatNoticeTimer = null
+      }
+      this.chatNotice = {
+        visible: false,
+        text: '',
+        icon: ''
+      }
     },
     
     showBubbleMessage(text) {
@@ -243,8 +319,8 @@ export default {
     
     moveToRandomPosition() {
       // 随机目标位置
-      this.targetX = Math.random() * (window.innerWidth - 100)
-      this.targetY = Math.random() * (window.innerHeight - 100)
+      this.targetX = Math.random() * (window.innerWidth - 150)
+      this.targetY = Math.random() * (window.innerHeight - 140)
       this.animationState = 'walking'
       
       // 根据目标位置决定方向
@@ -282,8 +358,8 @@ export default {
       const moveX = (dx / distance) * this.moveSpeed
       const moveY = (dy / distance) * this.moveSpeed
       
-      this.x = Math.max(0, Math.min(this.x + moveX, window.innerWidth - 80))
-      this.y = Math.max(0, Math.min(this.y + moveY, window.innerHeight - 80))
+      this.x = Math.max(0, Math.min(this.x + moveX, window.innerWidth - 136))
+      this.y = Math.max(0, Math.min(this.y + moveY, window.innerHeight - 128))
       
       requestAnimationFrame(() => this.animateMove())
     },
@@ -308,8 +384,8 @@ export default {
     // 窗口大小改变
     handleResize() {
       // 确保桌宠不会超出窗口
-      this.x = Math.max(0, Math.min(this.x, window.innerWidth - 80))
-      this.y = Math.max(0, Math.min(this.y, window.innerHeight - 80))
+      this.x = Math.max(0, Math.min(this.x, window.innerWidth - 136))
+      this.y = Math.max(0, Math.min(this.y, window.innerHeight - 128))
     },
     
     // 清理所有定时器
@@ -322,6 +398,10 @@ export default {
       if (this.menuTimer) {
         clearTimeout(this.menuTimer)
         this.menuTimer = null
+      }
+      if (this.chatNoticeTimer) {
+        clearTimeout(this.chatNoticeTimer)
+        this.chatNoticeTimer = null
       }
     },
     
@@ -365,8 +445,8 @@ export default {
 <style scoped>
 .desktop-pet {
   position: fixed;
-  width: 80px;
-  height: 80px;
+  width: 136px;
+  height: 128px;
   z-index: 9999;
   cursor: grab;
   user-select: none;
@@ -381,80 +461,152 @@ export default {
 .pet-body {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
+  transform-origin: center bottom;
 }
 
-.pet-emoji {
-  font-size: 60px;
-  transition: transform 0.3s ease;
+.tomato-pet {
+  --pet-scale: 1;
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 132px;
+  height: 124px;
+  transform: translateX(-50%) scale(var(--pet-scale));
+  transform-origin: center bottom;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(0 8px 0 rgba(72, 23, 11, 0.14));
+  transition: filter 0.2s ease;
+}
+
+.tomato-outline {
+  fill: #910506;
+}
+
+.tomato-fill {
+  fill: #ef070d;
+}
+
+.tomato-bright {
+  fill: #ff2930;
+}
+
+.tomato-edge-shadow,
+.tomato-bottom-shadow {
+  fill: #b30508;
+}
+
+.leaf-outline {
+  fill: #057522;
+}
+
+.leaf-main {
+  fill: #00ad2f;
+}
+
+.leaf-light {
+  fill: #25df51;
+}
+
+.leaf-mid {
+  fill: #0f932c;
+}
+
+.leaf-dark {
+  fill: #04701e;
+}
+
+.leaf-cut {
+  fill: #128e2e;
+  opacity: 0.7;
+}
+
+.tomato-eye,
+.tomato-mouth {
+  fill: #020202;
+}
+
+.tomato-cheek {
+  fill: #ffd7d9;
+}
+
+.pet-body:hover .tomato-pet {
+  filter: drop-shadow(0 12px 0 rgba(64, 18, 10, 0.18)) saturate(1.08);
 }
 
 /* 待机动画 */
-.pet-idle .pet-emoji {
+.pet-idle .tomato-pet {
   animation: idleBounce 2s ease-in-out infinite;
 }
 
 @keyframes idleBounce {
   0%, 100% {
-    transform: translateY(0) scale(1);
+    transform: translateX(-50%) translateY(0) scale(var(--pet-scale));
   }
   50% {
-    transform: translateY(-5px) scale(1.05);
+    transform: translateX(-50%) translateY(-5px) scale(calc(var(--pet-scale) * 1.05));
   }
 }
 
 /* 走路动画 */
-.pet-walking .pet-emoji {
+.pet-walking .tomato-pet {
   animation: walking 0.6s ease-in-out infinite;
 }
 
 @keyframes walking {
   0%, 100% {
-    transform: translateY(0) rotate(-5deg);
+    transform: translateX(-50%) translateY(0) rotate(-5deg) scale(var(--pet-scale));
   }
   50% {
-    transform: translateY(-8px) rotate(5deg);
+    transform: translateX(-50%) translateY(-8px) rotate(5deg) scale(var(--pet-scale));
   }
 }
 
 /* 开心动画 */
-.pet-happy .pet-emoji {
+.pet-happy .tomato-pet {
   animation: happy 0.5s ease-in-out;
 }
 
 @keyframes happy {
   0% {
-    transform: scale(1) rotate(0deg);
+    transform: translateX(-50%) scale(var(--pet-scale)) rotate(0deg);
   }
   25% {
-    transform: scale(1.2) rotate(-10deg);
+    transform: translateX(-50%) scale(calc(var(--pet-scale) * 1.2)) rotate(-10deg);
   }
   50% {
-    transform: scale(1.3) rotate(10deg);
+    transform: translateX(-50%) scale(calc(var(--pet-scale) * 1.3)) rotate(10deg);
   }
   75% {
-    transform: scale(1.2) rotate(-5deg);
+    transform: translateX(-50%) scale(calc(var(--pet-scale) * 1.2)) rotate(-5deg);
   }
   100% {
-    transform: scale(1) rotate(0deg);
+    transform: translateX(-50%) scale(var(--pet-scale)) rotate(0deg);
   }
 }
 
 /* 睡觉动画 */
-.pet-sleep .pet-emoji {
+.pet-sleep .tomato-pet {
   animation: sleep 3s ease-in-out infinite;
   opacity: 0.7;
 }
 
+.pet-sleep .tomato-eye {
+  transform: scaleY(0.25);
+  transform-origin: center;
+}
+
+.pet-happy .tomato-cheek {
+  fill: #ffc0c4;
+  opacity: 1;
+}
+
 @keyframes sleep {
   0%, 100% {
-    transform: translateY(0) rotate(0deg);
+    transform: translateX(-50%) translateY(0) rotate(0deg) scale(var(--pet-scale));
   }
   50% {
-    transform: translateY(-3px) rotate(5deg);
+    transform: translateX(-50%) translateY(-3px) rotate(5deg) scale(var(--pet-scale));
   }
 }
 
@@ -561,6 +713,11 @@ export default {
   transform: translateY(-50%) translateX(5px);
 }
 
+.pet-menu.notice-menu {
+  border: 1px solid #ffe4cc;
+  box-shadow: 0 8px 24px rgba(238, 170, 103, 0.24);
+}
+
 .pet-menu::before {
   content: '';
   position: absolute;
@@ -585,6 +742,14 @@ export default {
   background-color: #f5f5f5;
 }
 
+.notice-menu .menu-item {
+  background: #fffaf5;
+}
+
+.notice-menu .menu-item:hover {
+  background: #fff3e6;
+}
+
 .menu-icon {
   font-size: 18px;
 }
@@ -598,12 +763,13 @@ export default {
 /* 响应式 */
 @media (max-width: 768px) {
   .desktop-pet {
-    width: 60px;
-    height: 60px;
+    width: 104px;
+    height: 98px;
   }
-  
-  .pet-emoji {
-    font-size: 45px;
+
+  .tomato-pet {
+    --pet-scale: 0.76;
+    transform-origin: center bottom;
   }
   
   .pet-bubble {
@@ -616,4 +782,3 @@ export default {
   }
 }
 </style>
-

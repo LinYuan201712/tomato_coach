@@ -68,6 +68,16 @@ channels:
     encrypt_key: "<FEISHU_ENCRYPT_KEY>"
     domain: "feishu"
 
+mail:
+  enabled: false
+  host: "smtp.example.com"
+  port: 465
+  username: "<SMTP_USERNAME>"
+  password: "<SMTP_PASSWORD_OR_AUTH_CODE>"
+  from_address: "no-reply@example.com"
+  from_name: "Tomato Coach"
+  use_tls: true
+
 langfuse:
   enabled: false
   public_key: "<LANGFUSE_PUBLIC_KEY>"
