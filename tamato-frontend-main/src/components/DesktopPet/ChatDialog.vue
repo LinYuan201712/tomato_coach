@@ -287,6 +287,11 @@
           </div>
         </div>
       </transition>
+      <div
+        class="dialog-width-resizer"
+        title="拖拽调整聊天框宽度"
+        @mousedown.stop="startResizing('dialog', $event)"
+      ></div>
       </div>
   </div>
 </template>
@@ -334,8 +339,10 @@ export default {
       sidebarWidth: 260,
       previewWidth: 400,
       dialogWidth: 1000,
-      dialogHeight: 700,
+      dialogHeight: 780,
       resizingType: null,
+      resizeStartX: 0,
+      resizeStartWidth: 0,
       // 画像管理相关
       profileModalVisible: false,
       isSavingProfile: false,
@@ -371,10 +378,10 @@ export default {
       return {
         width: `${this.dialogWidth}px`,
         height: `${this.dialogHeight}px`,
-        resize: 'both',
         overflow: 'hidden',
-        minWidth: '600px',
-        minHeight: '400px'
+        minWidth: '560px',
+        minHeight: '520px',
+        maxWidth: 'calc(100vw - 80px)'
       }
     },
     hasSuggestions() {
@@ -524,6 +531,7 @@ export default {
       }
       this.messages.push(assistantMsg)
       const streamMessage = this.messages[this.messages.length - 1]
+      this.$emit('message-started')
 
       try {
         await chatStreamWithAI(
@@ -551,6 +559,10 @@ export default {
           if (data && data.usage) {
             streamMessage.usage = { ...data.usage }
           }
+          this.$emit('message-generated', {
+            sessionID: this.currentSessionID,
+            sessionTitle: this.currentSessionTitle
+          })
           if (isFirst) {
             setTimeout(() => this.loadSessions(), 3000)
           }
@@ -691,15 +703,19 @@ export default {
     },
 
     // 拖拽逻辑
-    startResizing(type) {
+    startResizing(type, event) {
       this.isResizing = true
       this.resizingType = type
-      document.body.style.cursor = 'col-resize'
+      this.resizeStartX = event?.clientX || 0
+      this.resizeStartWidth = type === 'dialog' ? this.dialogWidth : 0
+      document.body.style.cursor = type === 'dialog' ? 'ew-resize' : 'col-resize'
+      document.body.style.userSelect = 'none'
     },
     stopResizing() {
       this.isResizing = false
       this.resizingType = null
       document.body.style.cursor = 'default'
+      document.body.style.userSelect = ''
     },
     doResize(event) {
       if (!this.isResizing) return
@@ -716,6 +732,12 @@ export default {
         if (newWidth > 200 && newWidth < 600) {
           this.previewWidth = newWidth
         }
+      } else if (this.resizingType === 'dialog') {
+        const minWidth = this.sidebarCollapsed ? 560 : this.sidebarWidth + 420
+        const maxWidth = Math.max(minWidth, window.innerWidth - 80)
+        const pointerDelta = event.clientX - this.resizeStartX
+        const newWidth = this.resizeStartWidth + pointerDelta * 2
+        this.dialogWidth = Math.max(minWidth, Math.min(newWidth, maxWidth))
       }
     },
 
@@ -1440,7 +1462,47 @@ export default {
   border-radius: 24px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.15);
   overflow: hidden;
+  position: relative;
   transition: none; /* 拖拽时不使用过渡 */
+}
+
+.dialog-width-resizer {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  bottom: 18px;
+  width: 12px;
+  cursor: ew-resize;
+  z-index: 80;
+}
+
+.dialog-width-resizer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 3px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(238, 170, 103, 0);
+  transform: translateY(-50%);
+  transition: background 0.2s ease;
+}
+
+.dialog-width-resizer::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid rgba(238, 170, 103, 0.65);
+  border-bottom: 2px solid rgba(238, 170, 103, 0.65);
+  border-bottom-right-radius: 10px;
+}
+
+.dialog-width-resizer:hover::before {
+  background: rgba(238, 170, 103, 0.45);
 }
 
 .chat-main {
